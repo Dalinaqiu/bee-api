@@ -9,8 +9,8 @@ import (
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 	"io"
-	"log"
 	"os"
+	"strings"
 )
 
 var AllModel = []interface{}{
@@ -121,7 +121,10 @@ func initBeeRegion() {
 		i++
 		// 获取当前行的内容
 		line := scanner.Text()
-		if err := tx.Exec(line).Error; err != nil {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		if err := tx.Exec(strings.TrimSpace(line)).Error; err != nil {
 			logger.GetLogger().Error("写入地址库失败", zap.Error(err))
 			continue
 		}
@@ -137,7 +140,8 @@ func initBeeRegion() {
 	}
 	// 检查 Scan 是否发生错误
 	if err := scanner.Err(); err != nil && !errors.Is(err, io.EOF) {
-		log.Fatal(err)
+		logger.GetLogger().Error("scanner error", zap.Error(err))
+	} else {
+		logger.GetLogger().Info("导入地址库成功.")
 	}
-	logger.GetLogger().Info("导入地址库成功.")
 }
