@@ -64,8 +64,45 @@ docker compose up -d --build
 2. 修改默认数据库密码、Redis 密码（可在 `deploy/docker-compose/docker-compose.yaml` 添加 `requirepass`），并在安全组/防火墙中仅开放需对外的端口。
 3. 定期升级基础镜像（`mysql`, `redis`, `golang`, `node`）并重新构建。
 
-## 8. 常见问题
-- **端口被占用**：检查 `8080/8888/13306/16379` 是否已有服务使用，如有冲突调整 Compose 中的映射。
+## 8. Bee Shop 插件对外暴露
+
+Bee Shop 插件默认在 Go 进程内单独监听 `127.0.0.1:18083`，如果要让外部（或小程序）访问 `http://<服务器IP>:18083/cocktailBeeOrder/...`，需要同时调整配置与端口映射：
+
+1. **配置文件**  
+   编辑 `server/config.yaml`（或线上正在加载的配置），将 `bee-shop` 段落改为：
+   ```yaml
+   bee-shop:
+     disable: false
+     listen: "0.0.0.0:18083"
+     host: "http://<服务器IP或域名>:18083"
+   ```
+   `listen` 绑定容器的所有网卡，`host` 用于 Bee Shop 生成对外 URL（可替换为域名/HTTPS）。
+
+2. **Docker 端口映射**  
+   在 `deploy/docker-compose/docker-compose.yaml` 或 `docker-compose-dev.yaml` 的 `server` 服务下新增：
+   ```yaml
+     ports:
+       - "8888:8888"
+       - "18083:18083"
+   ```
+   这样容器内的 18083 会映射到宿主机 18083。若使用其它端口，可自行调整。
+
+3. **重启服务**  
+   ```bash
+   cd deploy/docker-compose
+   docker compose up -d --build server
+   ```
+   或使用 `make run-dev`，确保 `gva-server` 容器重新加载配置。
+
+4. **验证**  
+   - `docker ps` 中应能看到 `0.0.0.0:18083->18083/tcp`。  
+   - 宿主机执行 `curl http://127.0.0.1:18083/cocktailBeeOrder/shop/goods/category/all`，确认服务就绪。  
+   - 公网访问 `http://<服务器IP>:18083/...` 或通过反向代理（nginx、Traefik 等）暴露到需要的域名。
+
+> 若希望继续走 `:8888` 端口，可在网关/Nginx 中配置 `/cocktailBeeOrder` 转发到 `127.0.0.1:18083`。本文档默认直接暴露 18083。
+
+## 9. 常见问题
+- **端口被占用**：检查 `8080/8888/13306/16379/18083` 是否已有服务使用，如有冲突调整 Compose 中的映射。
 - **镜像下载缓慢**：在服务器上配置国内镜像加速（如 `registry.cn-hangzhou.aliyuncs.com`）。
 - **容器内访问宿主机服务**：使用 `host.docker.internal` 或在 Compose 中挂载需要的网络。
 
